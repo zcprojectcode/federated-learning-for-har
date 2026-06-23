@@ -104,7 +104,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
         ax.set_ylim(max(0, min(accuracy) - 5), min(100, max(accuracy) + 5))
 
         fig.tight_layout()
-        path = os.path.join(save_dir, f"accuracy_vs_round.png")
+        path = os.path.join(save_dir, f"accuracy_vs_round.pdf")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved: {path}")
@@ -139,7 +139,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
         )
 
         fig.tight_layout()
-        path = os.path.join(save_dir, f"f1_per_class_vs_round.png")
+        path = os.path.join(save_dir, f"f1_per_class_vs_round.pdf")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved: {path}")
@@ -175,7 +175,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
         )
 
         fig.tight_layout()
-        path = os.path.join(save_dir, f"energy_vs_round.png")
+        path = os.path.join(save_dir, f"energy_vs_round.pdf")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved: {path}")
@@ -190,12 +190,12 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
 
     ax.bar(x, total_energies, color='skyblue', edgecolor='black')
 
-    ax.set_xlabel("Client")
-    ax.set_ylabel("Total Client Device Energy Usage (Wh)")
+    ax.set_xlabel("Client", fontsize=15)
+    ax.set_ylabel("Total Client Device Energy Usage (Wh)", fontsize=15)
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
     fig.tight_layout()
-    path = os.path.join(save_dir, f"client_energy.png")
+    path = os.path.join(save_dir, f"client_energy.pdf")
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {path}")
@@ -230,7 +230,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
         ax.set_xlim(rounds[0] - 0.5, rounds[-1] + 0.5)
 
         fig.tight_layout()
-        path = os.path.join(save_dir, f"fairness_index_vs_round.png")
+        path = os.path.join(save_dir, f"fairness_index_vs_round.pdf")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved: {path}")
@@ -254,7 +254,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
     fig.tight_layout()
-    path = os.path.join(save_dir, f"local_accuracy.png")
+    path = os.path.join(save_dir, f"local_accuracy.pdf")
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved: {path}")
@@ -266,7 +266,7 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
         x = np.arange(len(wo_total))
         width = 0.35
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(12,5))
 
         for i in range(len(wo_total)):
             wo_total[i] = wo_total[i] / 3600000
@@ -277,13 +277,14 @@ def plot_results(metrics, local_accuracies, wo_total, wt_total, save_dir="plots"
 
         ax.set_xticks(x)
         ax.set_xticklabels([str(i+1) for i in x])
+        ax.set_ylim(0, 0.035)
         ax.set_xlabel("Client")
         ax.set_ylabel("Wearable Energy Usage (Wh)")
         ax.grid(axis='y', linestyle='--', alpha=0.7)
         ax.legend()
 
         fig.tight_layout()
-        path = os.path.join(save_dir, f"wearable_energy.png")
+        path = os.path.join(save_dir, f"wearable_energy.pdf")
         fig.savefig(path, dpi=150, bbox_inches="tight")
         plt.close(fig)
         print(f"Saved: {path}")

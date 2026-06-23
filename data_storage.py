@@ -64,8 +64,8 @@ class DataStorage:
                 label -= 1
 
             # Use the minimal sensor architecture 
-            samples.append((np.nan_to_num(imu[:, np.r_[0:9, 18:27, 99:108, 117:135, 144:162, 180:207, 225:261]], nan=0.0), label))
-            # samples.append((np.nan_to_num(imu[:, np.r_[0:9, 18:27, 99, 117, 126, 144, 153, 180, 189, 198, 225, 234, 243, 252]], nan=0.0), label))
+            samples.append((np.nan_to_num(imu[:, np.r_[0:9, 81:90, 99:108, 117:135, 144:162, 189:207, 225:261]], nan=0.0), label))
+            # samples.append((np.nan_to_num(imu[:, np.r_[0:9, 81:90, 99, 117, 126, 144, 153, 189, 198, 225, 234, 243, 252]], nan=0.0), label))
             
         return samples
     

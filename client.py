@@ -1,12 +1,37 @@
+"""
+MIT License
+
+Copyright (c) 2026 Farhad Rezazadeh
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 from tqdm import trange, tqdm
 import torch
 import torch.nn.functional as F
-from optimizers import (
+from aggregators import (
     FedAvgOptimizer,
     FedProxOptimizer,
     FedDANEOptimizer,
     FedSGDOptimizer,
     FedNovaOptimizer,
+    FedPerOptimizer,
 )
 import numpy as np
 import logging
@@ -60,31 +85,32 @@ class Client:
         else:
             self.train_loader = train_loader
         
-        # Map algorithm name to optimizer class
-        optimizer_map = {
+        # Map algorithm name to aggregator class
+        aggregator_map = {
             "fedavg":  FedAvgOptimizer,
             "fedprox": FedProxOptimizer,
             "feddane": FedDANEOptimizer,
             "fedsgd":  FedSGDOptimizer,
-            "fednova": FedNovaOptimizer
+            "fednova": FedNovaOptimizer,
+            "fedper": FedPerOptimizer
         }
-        optimizer_cls = optimizer_map[config.algorithm]
+        agg_mechanism = aggregator_map[config.algorithm]
 
-        # Instantiate optimizer (pass mu for prox/DANE)
+        # Select aggregation mechanism
         if config.algorithm in ("fedprox", "feddane"):
-            self.optimizer = optimizer_cls(
+            self.aggregator = agg_mechanism(
                 self.model.parameters(),
                 lr=config.local_lr,
                 mu=config.global_lr
             )
-        elif config.algorithm in ("fedavg", "fednova"):
-            self.optimizer = optimizer_cls(
+        elif config.algorithm in ("fedavg", "fednova", "fedper"):
+            self.aggregator = agg_mechanism(
                 self.model.parameters(),
                 lr=config.local_lr,
                 weight_decay=config.weight_decay
             )
         else:
-            self.optimizer = optimizer_cls(
+            self.aggregator = agg_mechanism(
                 self.model.parameters(),
                 lr=config.local_lr
             )
@@ -104,41 +130,52 @@ class Client:
         """
         step_count = 0
         squared_losses = []
+        entropy_scores = []
         self.model.train()
+
         epochs = 1 if self.config.algorithm == "fedsgd" else self.config.local_epochs
 
+        # Train client models
         for epoch in trange(1, epochs + 1,
                             desc=f"Client {self.client_id} Epoch",
                             leave=False):
-            # iterate over batches with tqdm
+
             for batch_idx, (data, target) in enumerate(
                     tqdm(self.train_loader,
                          desc=f"Client {self.client_id} Batches",
                          leave=False,
                          unit="batch")):
                 data, target = data.to(self.device), target.to(self.device)
-                self.optimizer.zero_grad()
+                self.aggregator.zero_grad()
                 logits, _ = self.model(data)
                 loss = F.cross_entropy(logits, target)
                 squared_losses.append((loss ** 2).detach().cpu())
                 loss.backward()
 
+                # Entropy
+                probs = F.softmax(logits, dim=-1)
+                log_probs = F.log_softmax(logits, dim=-1)
+                sample_entropy = -(probs * log_probs).sum(dim=-1)
+                mean_entropy = sample_entropy.mean()
+                entropy_scores.append((mean_entropy ** 2).detach().cpu())
+
                 # call step with correct signature
-                if self.config.algorithm == "fedavg":
-                    self.optimizer.step()
+                if self.config.algorithm in ("fedavg", "fedper"):
+                    self.aggregator.step()
                 elif self.config.algorithm == "fedprox":
-                    self.optimizer.step(global_params=global_model)
+                    self.aggregator.step(global_params=global_model)
                 elif self.config.algorithm == "feddane":
-                    self.optimizer.step(global_params=global_model, global_gradients=global_grads)
+                    self.aggregator.step(global_params=global_model, global_gradients=global_grads)
                 elif self.config.algorithm == "fedsgd":
-                    self.optimizer.zero_grad()
-                    self.optimizer.step(global_gradients=global_grads)
+                    self.aggregator.zero_grad()
+                    self.aggregator.step(global_gradients=global_grads)
                 elif self.config.algorithm == "fednova":
-                    self.optimizer.step()
+                    self.aggregator.step()
                     step_count += 1
         
         num_samples = len(squared_losses)
         rms_losses = np.sqrt(np.mean(squared_losses))
         total_loss = num_samples * rms_losses
+        total_entropy = num_samples * np.sqrt(np.mean(entropy_scores))
         
-        return self.model, step_count, total_loss.item()
+        return self.model, step_count, total_loss.item(), total_entropy.item()

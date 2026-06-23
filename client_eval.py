@@ -42,7 +42,10 @@ def evaluate_local(local_models, selected, data_loader, num_classes, device, eva
 
         accs.append(acc)
     
-    logging.info(f"Overall accuracy {eval_time} training: {np.mean(accs)}")
+    if eval_time == "before":
+        logging.info(f"Average accuracy {eval_time} training (all clients): {np.mean(accs)}")
+    elif eval_time == "after":
+        logging.info(f"Average accuracy {eval_time} training (selected clients): {np.mean(accs)}")
 
     # Per-class accuracy
     cm = confusion_matrix(all_labels, all_preds, labels=list(range(num_classes)), normalize="true")

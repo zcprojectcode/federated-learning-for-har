@@ -1,3 +1,27 @@
+"""
+MIT License
+
+Copyright (c) 2026 Farhad Rezazadeh
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
+
 import copy
 import torch
 import math
@@ -13,13 +37,22 @@ import logging
 import random
 
 class Server:
-    def __init__(self, config, data_loader, device):
+    def __init__(self, config, data_loader, device, SEED):
+        random.seed(SEED)
+        np.random.seed(SEED)
+        torch.manual_seed(SEED)
+        torch.cuda.manual_seed(SEED)
+        torch.cuda.manual_seed_all(SEED) 
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        
         self.config = config
         self.data_loader = data_loader
         self.device = device
         self.wearable_selection = None
         self.window_counts = data_loader.get_windows()
         self.client_energies = []
+        self.participated = []
         device_types = []
 
         # Randomly assign clients a device profile
@@ -41,6 +74,10 @@ class Server:
 
         # Initialise global model
         self.global_model = InertialTransformer().to(self.device)
+
+        # Initialise personalised models for FedPer
+        if config.algorithm == 'fedper':
+            self.personalised_dicts = [None for i in range(config.num_clients)]
 
     def select_clients(self):
         """
@@ -80,7 +117,8 @@ class Server:
         Args:
             selected_clients: list containing the selected clients for
             global aggregation round
-            global_grads: used by FedSGD and FedDANE
+            global_grads: used by FedSGD and FedDANE to prevent drift 
+            during local training 
         
         Returns:
             local_models: updated client models using local data
@@ -91,8 +129,14 @@ class Server:
         local_models = []
         step_counts = []
         total_losses = []
+        total_entropy = []
         for idx in selected_clients:
             local_model = copy.deepcopy(self.global_model)
+
+            # Re-load the personalised model for fedper clients
+            if self.config.algorithm == 'fedper':
+                if self.personalised_dicts[idx] != None:
+                    local_model.set_state_dict(self.personalised_dicts[idx])
 
             if self.config.hetero_wearables:
                 selection = self.wearable_selection[idx]
@@ -108,16 +152,17 @@ class Server:
                 wearable_selection=selection
             )
 
-            trained_model, step_count, utility = client.train(
-                global_model=self.global_model,
+            trained_model, step_count, utility, entropy = client.train(
+                global_model=copy.deepcopy(self.global_model),
                 global_grads=global_grads,
             )
 
             local_models.append(trained_model)
             step_counts.append(step_count)
             total_losses.append(utility)
+            total_entropy.append(entropy)
 
-        return local_models, step_counts, total_losses
+        return local_models, step_counts, total_losses, total_entropy
 
     def avg_grads(self, local_models, client_weight, client_accs):
         """
@@ -215,6 +260,30 @@ class Server:
             global_dict[k] = (global_dict[k].float() - global_lr * tau_eff * agg)
 
         self.global_model.load_state_dict(global_dict)
+    
+    def avg_grads_fedper(self, local_models, client_weight):
+        """
+        FedPer
+        Average base layer parameters across all local models, weighted by data size.
+        Personalized layer parameters remain local to clients
+
+        Args:
+            local_models: models being aggregated
+            client_weight: amount of data for each client
+        """
+        total_weights = sum(client_weight)
+        combined_weights = torch.tensor(client_weight, dtype=torch.float32) / total_weights
+
+        global_dict = self.global_model.get_base_state_dict()
+        for key in global_dict.keys():
+            stacked = torch.stack([lm.get_base_state_dict()[key].float() for lm in local_models], dim=0)
+
+            weight_shape = [-1] + [1] * (stacked.dim() - 1)
+            w = combined_weights.view(weight_shape).to(stacked.device)
+
+            global_dict[key] = (stacked * w).sum(dim=0)
+
+        self.global_model.set_state_dict(global_dict)
 
     def run(self):
         all_metrics = []
@@ -265,6 +334,7 @@ class Server:
                 # Select the client device that has used the least amount of energy
                 for j in range(self.config.devices_per_client):
                     client_energy = self.client_energies[i][j].get_used_battery()
+                    # client_energy = self.client_energies[i][j].get_battery()
                     total_energy += client_energy
                     if client_energy < min_energy:
                         min_energy = client_energy
@@ -275,24 +345,37 @@ class Server:
             
             # Select clients for global aggregation round
             selected = self.select_clients()
+            for s in selected:
+                if s not in self.participated:
+                    self.participated.append(s)
 
             # Receive amount of data available to selected clients for local training
             for idx in selected:
                 client_weight.append(len(self.data_loader.get_training_idx(idx)))
             
-            # Compute global grads for FedSGD and FedDANE
-            global_grads = compute_global_grads(self.global_model, self.self.data_loader.get_training_idx(idx), self.device) if needs_global_grads else None
+                # Compute global grads for FedSGD and FedDANE
+                global_grads = compute_global_grads(self.global_model, self.data_loader.get_training_idx(idx), self.device) if needs_global_grads else None
 
             # Evaluate performance of global model (no local training)
-            evaluate_local([self.global_model for i in selected], selected, self.data_loader, self.config.num_classes, self.device, "before")
-
+            accs, _ = evaluate_local([self.global_model for i in range(self.config.num_clients)], [i for i in range(self.config.num_clients)], self.data_loader, self.config.num_classes, self.device, "before")
+            # Allow client to evaluate performance using the global model if it hsa not participated in an aggregation round (EAFL eval)
+            for idx, acc in enumerate(self.local_accuracies):
+                if (idx not in selected) and (idx not in self.participated):
+                    self.local_accuracies[idx] = accs[idx]
+            
             # Perform local training and evaluate performance of updated model
-            local_models, local_steps, total_losses = self.train_clients(selected)
+            local_models, local_steps, total_losses, total_entropy  = self.train_clients(selected, global_grads)
             accs, metrics = evaluate_local(local_models, selected, self.data_loader, self.config.num_classes, self.device, "after")
 
             # Calculate a new global model
             if self.config.algorithm == "fednova":
                 self.avg_grads_fednova(local_models, local_steps, client_weight)
+            elif self.config.algorithm == "fedper":
+                curr_client = 0
+                for select in selected:
+                    self.personalised_dicts[select] = local_models[curr_client].get_personalised_state_dict()
+                    curr_client += 1
+                self.avg_grads_fedper(local_models, client_weight)
             else:
                 self.avg_grads(local_models, client_weight, accs)
 
@@ -303,6 +386,7 @@ class Server:
                 self.local_accuracies[i] = accs[curr_client]
                 index = min_energy_indices[i]
                 self.client_energies[i][index].update_energy()
+                # self.client_utils[i] = calculate_util(client_weight[curr_client], self.client_energies[i][index].get_training_time(), self.config.alpha)
                 self.client_utils[i] = calculate_util(total_losses[curr_client], 
                                         self.client_energies[i][index].get_training_time(), self.config.alpha)
                 curr_client += 1
@@ -320,6 +404,8 @@ class Server:
                 used_energy.append(used)
                 curr_energy.append((1 - used/total) * 100)
             
+            logging.info(f"Used energy: {used_energy}")
+
             # Add values to metrics for plotting
             metrics["local_accuracy"] = copy.deepcopy(self.local_accuracies)
             metrics["energy"] = curr_energy
@@ -338,5 +424,5 @@ class Server:
         
         # Log the best accuracy and round
         logging.info(f"Best accuracy: {best_acc:.2f}% at round {best_round}")
-
+                
         return best_state, best_acc, best_round, all_metrics, self.local_accuracies, wo_total, wt_total

@@ -74,4 +74,5 @@ class ClientEnergy:
         return self.battery_used
 
     def __str__(self):
-        return f"Used energy: {self.battery_used:.2f}"
+        return f"Current battery level: {self.curr_battery_level:.2f}"
+        #return f"Used energy: {self.battery_used:.2f}"
