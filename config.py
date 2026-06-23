@@ -20,7 +20,7 @@ class FLConfig:
         self.smart_selection = True     # If True, use accuracy and energy-aware device selection (random if False)
         self.accuracy_aware_agg = False # If True, include accuracy term in model aggregation (FedAvg)
         self.reduce_dimensions = False  # Reduce the object sensor dimensions to binary
-        self.hetero_wearables = True    # If true, select one wearable sensor based on energy
+        self.hetero_wearables = False   # If true, select one wearable sensor based on energy
 
         # Where to save the global model
         self.save_path = f"models/global_{algorithm}.pth"
