@@ -51,9 +51,9 @@ checkpoint = {
 }
 ```
 
-### References:
-FL implementation: https://github.com/frezazadeh/federated-learning     
-The following papers and GitHub repositories were used to develop or inspire this framework. Copyright permissions and additional references have been included where required throughout the repository.     
+### References:    
+The following papers and GitHub repositories were used to develop or inspire this framework. Copyright permissions and additional references have been included where required throughout the repository. 
+FL implementation: https://github.com/frezazadeh/federated-learning    
 Tiny transformer encoder model: Lamaakal, I., Yahyati, C., Maleh, Y. et al. A tiny inertial transformer for human activity recognition via multimodal knowledge distillation and explainable AI. Sci Rep 15, 42335 (2025). https://doi.org/10.1038/s41598-025-26297-2 (Copyright (c) 2025 Ismail Lamaakal)    
 Device selection mechanism formulation: F. Lai, X. Zhu, H. V. Madhyastha, and M. Chowdhury, “Oort: Efficient Federated Learning via Guided Participant Selection,” in 15th USENIX Symposium on Operating Systems Design and Implementation, Santa Clara, CA, (2021) ISBN: 978-1-939133-22-9 AND A. Arouj and A. M. Abdelmoniem, “Towards energy-aware federated learning on battery-powered clients,” in Proceedings of the 1st ACM Workshop on Data Privacy and Federated Learning Technologies for Mobile Edge Network, (2022) https://dl.acm.org/doi/10.1145/3556557.3557952    
 Client device energy usage: H. Cho, A. Mathur, and F. Kawsar, “FLAME: Federated Learning across Multi-device Environments,” Proceedings of the ACM on Interactive, Mobile, Wearable and Ubiquitous Technologies, (2022). https://doi.org/10.1145/3550289     
