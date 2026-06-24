@@ -1,5 +1,5 @@
 # Federated Learning for HAR
-This repository investigates the use of a federated learning architecture for privacy-preserving Human Activity Recognition (HAR) to support independent living in smart homes. The framework was designed to fit the Inertial Measurement Unit (IMU) data found here: https://doi.org/10.25919/d7xf-n080. Thie framework can be adapted for alternative datasets.     
+This repository investigates the use of a federated learning architecture for privacy-preserving Human Activity Recognition (HAR) to support independent living in smart homes. The framework was designed to fit the Inertial Measurement Unit (IMU) data found here: https://doi.org/10.25919/d7xf-n080. The framework can be adapted for alternative datasets.     
 
 ### Previous work    
 Previous studies that evaluated the feasibility of IMU-based HAR using the same dataset include:    
